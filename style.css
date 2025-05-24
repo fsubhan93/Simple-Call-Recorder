@@ -1,0 +1,191 @@
+// Simulated call recorder functionality
+let mediaRecorder;
+let audioChunks = [];
+let currentCall = null;
+let isRecording = false;
+
+// DOM Elements
+const callStatus = document.getElementById('callStatus');
+const startCallBtn = document.getElementById('startCallBtn');
+const outgoingCallBtn = document.getElementById('outgoingCallBtn');
+const endCallBtn = document.getElementById('endCallBtn');
+const startRecordingBtn = document.getElementById('startRecordingBtn');
+const stopRecordingBtn = document.getElementById('stopRecordingBtn');
+const recordingsList = document.getElementById('recordings');
+
+// Event Listeners
+startCallBtn.addEventListener('click', simulateIncomingCall);
+outgoingCallBtn.addEventListener('click', simulateOutgoingCall);
+endCallBtn.addEventListener('click', endCall);
+startRecordingBtn.addEventListener('click', startRecording);
+stopRecordingBtn.addEventListener('click', stopRecording);
+
+// Check for previous recordings in localStorage
+loadRecordings();
+
+// Register Service Worker for PWA
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js')
+            .then(registration => {
+                console.log('ServiceWorker registration successful');
+            })
+            .catch(err => {
+                console.log('ServiceWorker registration failed: ', err);
+            });
+    });
+}
+
+// Simulate incoming call
+function simulateIncomingCall() {
+    currentCall = {
+        type: 'incoming',
+        number: 'Unknown Number',
+        startTime: new Date()
+    };
+    
+    updateCallStatus(`Incoming call from ${currentCall.number}`, 'call-active');
+    startCallBtn.disabled = true;
+    outgoingCallBtn.disabled = true;
+    endCallBtn.disabled = false;
+    startRecordingBtn.disabled = false;
+}
+
+// Simulate outgoing call
+function simulateOutgoingCall() {
+    currentCall = {
+        type: 'outgoing',
+        number: '555-1234',
+        startTime: new Date()
+    };
+    
+    updateCallStatus(`Calling ${currentCall.number}...`, 'call-outgoing');
+    startCallBtn.disabled = true;
+    outgoingCallBtn.disabled = true;
+    endCallBtn.disabled = false;
+    startRecordingBtn.disabled = false;
+}
+
+// End current call
+function endCall() {
+    if (isRecording) {
+        stopRecording();
+    }
+    
+    if (currentCall) {
+        currentCall.endTime = new Date();
+        currentCall.duration = Math.floor((currentCall.endTime - currentCall.startTime) / 1000);
+        
+        // In a real app, you would save call log here
+        console.log('Call ended:', currentCall);
+    }
+    
+    updateCallStatus('No active call');
+    startCallBtn.disabled = false;
+    outgoingCallBtn.disabled = false;
+    endCallBtn.disabled = true;
+    startRecordingBtn.disabled = true;
+    stopRecordingBtn.disabled = true;
+    currentCall = null;
+}
+
+// Update call status display
+function updateCallStatus(text, className = '') {
+    callStatus.textContent = text;
+    callStatus.className = 'status ' + className;
+}
+
+// Start recording
+async function startRecording() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        
+        mediaRecorder.ondataavailable = event => {
+            audioChunks.push(event.data);
+        };
+        
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
+            saveRecording(audioBlob);
+            audioChunks = [];
+        };
+        
+        mediaRecorder.start();
+        isRecording = true;
+        startRecordingBtn.disabled = true;
+        stopRecordingBtn.disabled = false;
+        updateCallStatus(callStatus.textContent + ' (Recording)', 'recording-active');
+        
+        // In a real app, you would start recording automatically when call starts
+        console.log('Recording started');
+    } catch (error) {
+        console.error('Error starting recording:', error);
+        alert('Could not start recording. Please ensure microphone access is granted.');
+    }
+}
+
+// Stop recording
+function stopRecording() {
+    if (mediaRecorder && isRecording) {
+        mediaRecorder.stop();
+        isRecording = false;
+        startRecordingBtn.disabled = false;
+        stopRecordingBtn.disabled = true;
+        
+        // Stop all tracks in the stream
+        mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        
+        updateCallStatus(callStatus.textContent.replace(' (Recording)', ''));
+        console.log('Recording stopped');
+    }
+}
+
+// Save recording to localStorage
+function saveRecording(blob) {
+    const reader = new FileReader();
+    reader.onload = function() {
+        const recordings = JSON.parse(localStorage.getItem('callRecordings') || '[]');
+        const recordingId = Date.now();
+        
+        recordings.unshift({
+            id: recordingId,
+            callType: currentCall ? currentCall.type : 'unknown',
+            phoneNumber: currentCall ? currentCall.number : 'unknown',
+            timestamp: new Date().toISOString(),
+            duration: currentCall ? currentCall.duration : 0,
+            audioData: reader.result.split(',')[1] // Remove data URL prefix
+        });
+        
+        localStorage.setItem('callRecordings', JSON.stringify(recordings));
+        displayRecordings(recordings);
+    };
+    reader.readAsDataURL(blob);
+}
+
+// Load recordings from localStorage
+function loadRecordings() {
+    const recordings = JSON.parse(localStorage.getItem('callRecordings') || '[]');
+    displayRecordings(recordings);
+}
+
+// Display recordings in the list
+function displayRecordings(recordings) {
+    recordingsList.innerHTML = '';
+    
+    recordings.forEach(recording => {
+        const li = document.createElement('li');
+        
+        const infoSpan = document.createElement('span');
+        infoSpan.textContent = `${recording.callType} call to ${recording.phoneNumber} - ${new Date(recording.timestamp).toLocaleString()}`;
+        
+        const downloadLink = document.createElement('a');
+        downloadLink.textContent = 'Download';
+        downloadLink.href = `data:audio/mp3;base64,${recording.audioData}`;
+        downloadLink.download = `call_recording_${recording.id}.mp3`;
+        
+        li.appendChild(infoSpan);
+        li.appendChild(downloadLink);
+        recordingsList.appendChild(li);
+    });
+}
