@@ -100,3 +100,15 @@ button:disabled {
     background-color: #e74c3c !important;
     color: white;
 }
+async function startRecording() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.start();
+        console.log("Recording started"); // Verify this logs
+    } catch (error) {
+        console.error("Error:", error);
+        alert("Microphone access denied!");
+    }
+}
+document.getElementById("startRecordingBtn").addEventListener("click", startRecording);
