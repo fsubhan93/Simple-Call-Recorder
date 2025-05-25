@@ -112,3 +112,9 @@ async function startRecording() {
     }
 }
 document.getElementById("startRecordingBtn").addEventListener("click", startRecording);
+mediaRecorder.onstop = () => {
+    const blob = new Blob(audioChunks, { type: "audio/mp3" });
+    const audioURL = URL.createObjectURL(blob);
+    const audio = new Audio(audioURL);
+    audio.play(); // Auto-plays the recording
+};
